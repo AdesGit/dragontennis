@@ -811,7 +811,7 @@ export const listMembers = query({
 `convex/members.ts`:
 ```ts
 import { v } from "convex/values";
-import { mutation, internalMutation, query } from "./_generated/server";
+import { mutation, internalMutation, query, MutationCtx } from "./_generated/server";
 import { requireAdmin } from "./users";
 
 const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
@@ -823,15 +823,27 @@ function newToken() {
 }
 
 async function insertInvite(
-  ctx: { db: any },
+  ctx: MutationCtx,
   args: { firstName: string; lastName: string; email: string; role: "admin" | "user" },
 ) {
+  // Normalize on insert so the lowercased lookup in auth.ts's createOrUpdateUser matches (review I-1).
   const email = args.email.toLowerCase();
+
   const existingUser = await ctx.db
     .query("users")
-    .withIndex("email", (q: any) => q.eq("email", email))
+    .withIndex("email", (q) => q.eq("email", email))
     .first();
   if (existingUser) throw new Error("Un compte existe déjà pour cet email");
+
+  // Supersede any prior unused invites for this email so a stale/expired one can't shadow
+  // the fresh invite via the callback's .first() lookup (review I-2).
+  const priorInvites = await ctx.db
+    .query("invites")
+    .withIndex("by_email", (q) => q.eq("email", email))
+    .collect();
+  for (const prior of priorInvites) {
+    if (!prior.used) await ctx.db.patch(prior._id, { used: true });
+  }
 
   const token = newToken();
   await ctx.db.insert("invites", {
