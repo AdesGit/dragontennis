@@ -1,0 +1,23 @@
+version: "3.8"
+
+services:
+  convex-tennis:
+    image: ghcr.io/get-convex/convex-backend:latest
+    container_name: convex-tennis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3220:3210"   # sync engine
+      - "127.0.0.1:3221:3211"   # http actions
+    volumes:
+      - /opt/convex-tennis/data:/convex/data
+      - /opt/convex-tennis/logs:/convex/logs
+    env_file:
+      - /opt/convex-tennis/.env
+    environment:
+      - PORT=3210
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3210/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
