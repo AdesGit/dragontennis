@@ -25,3 +25,23 @@ export const listMembers = query({
     return ctx.db.query("users").collect();
   },
 });
+
+export const listMembersWithPending = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireAdmin(ctx);
+    const members = await ctx.db.query("users").collect();
+    const memberEmails = new Set(members.map((m) => m.email).filter(Boolean));
+    const invites = await ctx.db.query("invites").collect();
+    const now = Date.now();
+    const pending = invites
+      .filter((i) => !i.used && i.expiresAt > now && !memberEmails.has(i.email))
+      .map((i) => ({
+        email: i.email,
+        firstName: i.firstName,
+        lastName: i.lastName,
+        expiresAt: i.expiresAt,
+      }));
+    return { members, pending };
+  },
+});
