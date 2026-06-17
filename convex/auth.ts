@@ -1,5 +1,6 @@
 import { Password } from "@convex-dev/auth/providers/Password";
 import { convexAuth } from "@convex-dev/auth/server";
+import type { MutationCtx } from "./_generated/server";
 
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   providers: [Password],
@@ -14,7 +15,10 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
       const email = (args.profile.email as string | undefined)?.toLowerCase();
       if (!email) throw new Error("Email requis");
 
-      const invite = await ctx.db
+      // Why: createOrUpdateUser receives GenericMutationCtx<AnyDataModel> which
+      // lacks user-defined index types. Cast to full MutationCtx for type safety.
+      const db = (ctx as unknown as MutationCtx).db;
+      const invite = await db
         .query("invites")
         .withIndex("by_email", (q) => q.eq("email", email))
         .filter((q) => q.eq(q.field("used"), false))
@@ -23,7 +27,7 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
       if (!invite) throw new Error("Inscription sur invitation uniquement");
       if (invite.expiresAt < Date.now()) throw new Error("Invitation expirée");
 
-      const userId = await ctx.db.insert("users", {
+      const userId = await db.insert("users", {
         email,
         firstName: invite.firstName,
         lastName: invite.lastName,
@@ -32,7 +36,7 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         status: "active",
         createdAt: Date.now(),
       });
-      await ctx.db.patch(invite._id, { used: true });
+      await db.patch(invite._id, { used: true });
       return userId;
     },
   },
