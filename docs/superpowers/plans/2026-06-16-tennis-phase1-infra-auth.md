@@ -325,17 +325,26 @@ Expected: two lines printed — `JWT_PRIVATE_KEY=-----BEGIN PRIVATE KEY----- ...
 
 - [ ] **Step 5: Set the Convex runtime env vars on the tennis instance**
 
-Run (paste the two values from Step 4; `SITE_URL` is the front-end app origin):
+⚠️ **Generate the keys ONCE.** Running `generateKeys.mjs` separately per `env set` would produce a
+**mismatched** private key / JWKS pair (different keypair each run) → auth silently broken. Capture
+one invocation's output into variables, then set all three. `SITE_URL` is the front-end app origin.
 ```bash
 export CONVEX_SELF_HOSTED_URL=http://127.0.0.1:3220
 export CONVEX_SELF_HOSTED_ADMIN_KEY="$(docker exec convex-tennis bash /convex/generate_admin_key.sh)"
 cd /home/claude/dev/tennis
-npx convex env set JWT_PRIVATE_KEY "<paste single-line private key>"
-npx convex env set JWKS '<paste JWKS json>'
+# One invocation; split the two output lines into vars without printing them:
+KEYS="$(node scripts/generateKeys.mjs)"
+PRIV="$(printf '%s\n' "$KEYS" | sed -n 's/^JWT_PRIVATE_KEY=//p')"
+JWKS_VAL="$(printf '%s\n' "$KEYS" | sed -n 's/^JWKS=//p')"
+# Pipe via stdin (the "-----BEGIN" prefix breaks positional-arg parsing):
+printf '%s' "$PRIV" | npx convex env set JWT_PRIVATE_KEY -
+printf '%s' "$JWKS_VAL" | npx convex env set JWKS -
 npx convex env set SITE_URL https://tennis.aidigitalassistant.cloud
+unset KEYS PRIV JWKS_VAL
 npx convex env list
 ```
-Expected: `npx convex env list` shows `JWT_PRIVATE_KEY`, `JWKS`, `SITE_URL`.
+Expected: `npx convex env list` shows `JWT_PRIVATE_KEY`, `JWKS`, `SITE_URL` (values masked). The
+private key and JWKS are a matched pair (same generator run).
 
 - [ ] **Step 6: Write `.env.local` for the dev front-end (gitignored) and commit the templates**
 
