@@ -12,6 +12,7 @@
   "dependencies": {
     "@auth/core": "0.37.4",
     "@convex-dev/auth": "^0.0.91",
+    "axios": "^1.10.0",
     "convex": "^1.34.0",
     "next": "15.3.6",
     "react": "^18.3.1",

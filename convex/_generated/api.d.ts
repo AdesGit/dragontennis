@@ -8,10 +8,19 @@
  * @module
  */
 
+import type * as ResetEmail from "../ResetEmail.js";
+import type * as activations from "../activations.js";
 import type * as auth from "../auth.js";
+import type * as balance from "../balance.js";
+import type * as courts from "../courts.js";
+import type * as crons from "../crons.js";
 import type * as email from "../email.js";
 import type * as http from "../http.js";
+import type * as legrand from "../legrand.js";
+import type * as legrandDb from "../legrandDb.js";
 import type * as members from "../members.js";
+import type * as pricing from "../pricing.js";
+import type * as transactions from "../transactions.js";
 import type * as users from "../users.js";
 
 import type {
@@ -21,10 +30,19 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  ResetEmail: typeof ResetEmail;
+  activations: typeof activations;
   auth: typeof auth;
+  balance: typeof balance;
+  courts: typeof courts;
+  crons: typeof crons;
   email: typeof email;
   http: typeof http;
+  legrand: typeof legrand;
+  legrandDb: typeof legrandDb;
   members: typeof members;
+  pricing: typeof pricing;
+  transactions: typeof transactions;
   users: typeof users;
 }>;
 
