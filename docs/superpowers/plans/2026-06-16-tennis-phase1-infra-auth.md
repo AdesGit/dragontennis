@@ -1328,7 +1328,13 @@ Run:
 # App code into the production tree:
 sudo mkdir -p /var/www/tennis
 sudo git -C /var/www/tennis clone /home/claude/dev/tennis . 2>/dev/null || (cd /var/www/tennis && sudo git pull)
+# CRITICAL (final-review Important #1): NEXT_PUBLIC_CONVEX_URL is inlined at BUILD time.
+# .env.local is gitignored and absent in the clone — provision it BEFORE `npm run build`,
+# or the bundle gets `new ConvexReactClient(undefined)` and crashes at load.
+echo "NEXT_PUBLIC_CONVEX_URL=https://convex-tennis.aidigitalassistant.cloud" | sudo tee /var/www/tennis/.env.production >/dev/null
 cd /var/www/tennis && sudo npm ci && npm run build
+# Also switch the email action's APP_URL to the public origin (was localhost:3001 for local phase):
+#   npx convex env set APP_URL https://tennis.aidigitalassistant.cloud
 # Convex backend (already deployed to the container in earlier tasks; redeploy from prod tree):
 export CONVEX_SELF_HOSTED_URL=http://127.0.0.1:3220
 export CONVEX_SELF_HOSTED_ADMIN_KEY="$(docker exec convex-tennis bash /convex/generate_admin_key.sh)"
