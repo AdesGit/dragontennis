@@ -69,7 +69,8 @@ export const failActivation = internalMutation({
   args: { activationId: v.id("activations"), reason: v.string() },
   handler: async (ctx, { activationId, reason }) => {
     const act = await ctx.db.get(activationId);
-    if (!act || act.status === "failed") return;
+    // Why: only reverse a pending activation — refunding active/used (already-served) sessions would be a money leak.
+    if (!act || act.status !== "pending") return;
     await ctx.db.patch(activationId, { status: "failed", netatmoResponse: reason });
     if (!act.transactionId) return;
 
@@ -173,7 +174,10 @@ export const turnoffDue = internalAction({
     const due = await ctx.runQuery(internal.activations.dueActive, {});
     for (const a of due) {
       const courtRow = await ctx.runQuery(internal.courts.byNumber, { courtNumber: a.court });
-      if (!courtRow) continue;
+      if (!courtRow) {
+        console.warn(`[turnoff] court ${a.court} introuvable — activation ${a._id} laissée active`);
+        continue;
+      }
       try {
         const resp = await ctx.runAction(internal.legrand.netatmoSetState, {
           homeId: courtRow.homeId,

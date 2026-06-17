@@ -10,6 +10,7 @@ export function HistoryPanel() {
   const members = useQuery(api.users.listMembers);
   const reverse = useMutation(api.balance.reverseTransaction);
   const [filter, setFilter] = useState("");
+  const [msg, setMsg] = useState<string | null>(null);
 
   if (txns === undefined || members === undefined) return <p>Chargement…</p>;
   const nameById = new Map(members.map((m) => [m._id, `${m.firstName} ${m.lastName}`]));
@@ -27,6 +28,9 @@ export function HistoryPanel() {
         placeholder="Rechercher (membre, type, commentaire)"
         className="rounded border border-gray-300 px-3 py-2"
       />
+      {msg && (
+        <p className="rounded bg-gray-100 px-3 py-2 text-sm text-gray-700">{msg}</p>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead>
@@ -47,7 +51,15 @@ export function HistoryPanel() {
                 <td>
                   {t.type !== "reversal" && (
                     <button
-                      onClick={() => reverse({ transactionId: t._id as Id<"transactions"> })}
+                      onClick={async () => {
+                        if (!window.confirm("Annuler cette transaction ?")) return;
+                        try {
+                          await reverse({ transactionId: t._id as Id<"transactions"> });
+                          setMsg("Transaction annulée.");
+                        } catch (err: unknown) {
+                          setMsg(err instanceof Error ? err.message : "Erreur lors de l'annulation.");
+                        }
+                      }}
                       className="text-red-600 hover:underline"
                     >
                       Annuler
