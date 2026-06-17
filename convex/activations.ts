@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { action, internalMutation, query } from "./_generated/server";
+import { action, internalAction, internalMutation, internalQuery, query } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { internal } from "./_generated/api";
 import { requireAdmin } from "./users";
@@ -145,5 +145,50 @@ export const listAll = query({
     await requireAdmin(ctx);
     const all = await ctx.db.query("activations").collect();
     return all.sort((a, b) => b.startTime - a.startTime);
+  },
+});
+
+export const dueActive = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const active = await ctx.db
+      .query("activations")
+      .withIndex("by_status", (q) => q.eq("status", "active"))
+      .collect();
+    return active.filter((a) => a.endTime <= now);
+  },
+});
+
+export const markUsed = internalMutation({
+  args: { activationId: v.id("activations"), netatmoResponse: v.string() },
+  handler: async (ctx, { activationId, netatmoResponse }) => {
+    await ctx.db.patch(activationId, { status: "used", netatmoResponse });
+  },
+});
+
+export const turnoffDue = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    const due = await ctx.runQuery(internal.activations.dueActive, {});
+    for (const a of due) {
+      const courtRow = await ctx.runQuery(internal.courts.byNumber, { courtNumber: a.court });
+      if (!courtRow) continue;
+      try {
+        const resp = await ctx.runAction(internal.legrand.netatmoSetState, {
+          homeId: courtRow.homeId,
+          moduleId: courtRow.moduleId,
+          bridgeId: courtRow.bridgeId,
+          on: false,
+        });
+        await ctx.runMutation(internal.activations.markUsed, {
+          activationId: a._id,
+          netatmoResponse: resp,
+        });
+      } catch (err: unknown) {
+        // Leave it active; the next cron tick retries. Log only.
+        console.log(`[turnoff] court ${a.court} échec: ${err instanceof Error ? err.message : err}`);
+      }
+    }
   },
 });

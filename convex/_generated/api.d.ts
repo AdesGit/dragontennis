@@ -12,6 +12,7 @@ import type * as activations from "../activations.js";
 import type * as auth from "../auth.js";
 import type * as balance from "../balance.js";
 import type * as courts from "../courts.js";
+import type * as crons from "../crons.js";
 import type * as email from "../email.js";
 import type * as http from "../http.js";
 import type * as legrand from "../legrand.js";
@@ -32,6 +33,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   balance: typeof balance;
   courts: typeof courts;
+  crons: typeof crons;
   email: typeof email;
   http: typeof http;
   legrand: typeof legrand;

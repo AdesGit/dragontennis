@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, internalMutation, query } from "./_generated/server";
+import { mutation, internalMutation, internalQuery, query } from "./_generated/server";
 import { requireAdmin } from "./users";
 
 export const list = query({
@@ -40,6 +40,16 @@ export const seedCourts = internalMutation({
         active: true,
       });
     }
+  },
+});
+
+export const byNumber = internalQuery({
+  args: { courtNumber: v.number() },
+  handler: async (ctx, { courtNumber }) => {
+    return ctx.db
+      .query("courts")
+      .withIndex("by_court", (q) => q.eq("courtNumber", courtNumber))
+      .first();
   },
 });
 
