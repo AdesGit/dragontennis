@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, internalMutation, query, MutationCtx } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { requireAdmin } from "./users";
 
 const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
@@ -51,6 +52,10 @@ export const createMember = mutation({
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
     const token = await insertInvite(ctx, { ...args, role: "user" });
+    await ctx.scheduler.runAfter(0, internal.email.sendInvite, {
+      email: args.email.toLowerCase(),
+      token,
+    });
     return { token };
   },
 });
