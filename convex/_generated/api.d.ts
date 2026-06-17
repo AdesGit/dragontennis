@@ -20,6 +20,7 @@ import type * as legrand from "../legrand.js";
 import type * as legrandDb from "../legrandDb.js";
 import type * as members from "../members.js";
 import type * as pricing from "../pricing.js";
+import type * as stats from "../stats.js";
 import type * as transactions from "../transactions.js";
 import type * as users from "../users.js";
 
@@ -42,6 +43,7 @@ declare const fullApi: ApiFromModules<{
   legrandDb: typeof legrandDb;
   members: typeof members;
   pricing: typeof pricing;
+  stats: typeof stats;
   transactions: typeof transactions;
   users: typeof users;
 }>;
