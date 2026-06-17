@@ -492,7 +492,7 @@ export default authConfig;
 
 `convex/auth.ts`:
 ```ts
-import Password from "@convex-dev/auth/providers/Password";
+import { Password } from "@convex-dev/auth/providers/Password";  // named export in v0.0.91 (matches LifeLup)
 import { convexAuth } from "@convex-dev/auth/server";
 
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
