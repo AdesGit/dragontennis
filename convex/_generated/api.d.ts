@@ -15,6 +15,7 @@ import type * as balance from "../balance.js";
 import type * as courts from "../courts.js";
 import type * as crons from "../crons.js";
 import type * as email from "../email.js";
+import type * as faq from "../faq.js";
 import type * as http from "../http.js";
 import type * as legrand from "../legrand.js";
 import type * as legrandDb from "../legrandDb.js";
@@ -38,6 +39,7 @@ declare const fullApi: ApiFromModules<{
   courts: typeof courts;
   crons: typeof crons;
   email: typeof email;
+  faq: typeof faq;
   http: typeof http;
   legrand: typeof legrand;
   legrandDb: typeof legrandDb;
