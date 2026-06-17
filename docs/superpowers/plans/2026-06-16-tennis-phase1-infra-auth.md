@@ -24,6 +24,22 @@ Every task implicitly inherits these (copied verbatim from the spec / sibling-pr
 
 **Testing approach (read before starting):** This project has **no unit-test runner** (MVP phase, mirrors sibling project LifeLup). Each task's verification = the real validation gates: `npm run build` (zero TS errors), `npm run lint` (zero warnings), `npx convex deploy` (schema validates), targeted `curl` / `npx convex run`, and a manual behavioral check. "Run to verify it fails" steps are framed against these gates.
 
+**EXECUTION SCOPE — local-only (decided with the operator):** This run provisions the Convex
+instance **bound to localhost** and defers all public exposure. Concretely:
+- Task 2 brings up the `convex-tennis` container and verifies via `http://127.0.0.1:3220/3221` (no DNS needed).
+- `npx convex deploy` targets `http://127.0.0.1:3220` throughout — this validates the schema and
+  generates `convex/_generated`, so `npm run build` type-checks fully.
+- **Browser-based auth E2E is deferred.** Convex Auth's JWT issuer must be a reachable public
+  `https` domain (JWKS fetch), which requires the DNS records + TLS that don't exist yet. So for
+  Tasks 4 and 7, runtime sign-in / accept-invite **in a browser is verified later**, during the
+  public-deploy pass. Their per-task gates here are: build + lint clean, schema/functions deploy,
+  and data-level checks via `npx convex run` (e.g. `seedAdminInvite`, `getInviteByToken`).
+- **Task 8 Steps 6–7 (Nginx vhost, certbot, PM2 prod, browser smoke test) are DEFERRED** to a
+  separate supervised pass after the operator creates the two DNS A records
+  (`tennis` + `convex-tennis` → `72.62.129.117`). In this run, Task 8 only writes/commits the
+  `ecosystem.config.cjs` and `deploy/nginx-tennis.conf` files and verifies route protection via
+  `npm run build`/`npm run lint` (the `AuthGate` redirect is exercised in the deferred browser pass).
+
 **Convex CLI env (used in every `npx convex *` command below).** Export once per shell session on the VPS:
 ```bash
 export CONVEX_SELF_HOSTED_URL=http://127.0.0.1:3220
@@ -79,9 +95,8 @@ export CONVEX_SELF_HOSTED_ADMIN_KEY="$(docker exec convex-tennis bash /convex/ge
     "autoprefixer": "^10.4.20",
     "eslint": "^8",
     "eslint-config-next": "15.3.6",
+    "googleapis": "^161.0.0",
     "jose": "^5.9.6",
-    "nodemailer": "^6.9.16",
-    "@types/nodemailer": "^6.4.17",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.3",
     "typescript": "^5"
@@ -881,84 +896,111 @@ git commit -m "feat(members): admin invite mutation, getInviteByToken, first-adm
 
 ---
 
-### Task 6: Invite email via Convex action (nodemailer/SMTP)
+### Task 6: Invite email via Convex action (Gmail API — reused from padel)
+
+> **Mechanism correction:** padel does NOT use SMTP/nodemailer — it sends via the **Gmail API**
+> (`googleapis`, OAuth2 refresh-token). This task ports padel's `utils/gmailSender.js` send logic
+> into a Convex `"use node"` action and reuses padel's existing OAuth app credentials.
 
 **Files:**
 - Create: `/home/claude/dev/tennis/convex/email.ts`
-- Modify: `/home/claude/dev/tennis/convex/members.ts` (schedule the email from `createMember`; dev fallback logs the link)
+- Modify: `/home/claude/dev/tennis/convex/members.ts` (schedule the email from `createMember`)
 - Modify: `/home/claude/dev/tennis/convex/_generated/api.d.ts` (register `email`)
 
 **Interfaces:**
-- Consumes: SMTP env vars on the Convex instance; `{ token, email }` from `createMember`.
+- Consumes: Gmail OAuth env vars on the Convex instance; `{ token, email }` from `createMember`.
 - Produces: `internal.email.sendInvite({ email, token })` — `"use node"` action that emails the accept-invite link. `createMember` schedules it after inserting the invite.
 
-- [ ] **Step 1: Set SMTP env vars on the tennis instance** (reuse padel's working SMTP creds)
+- [ ] **Step 1: Set the Gmail OAuth env vars on the tennis instance** (reuse padel's working OAuth app)
 
-Run:
+These values live in padel's real `.env` (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`; sender account `padel.asdragon@gmail.com`). **Do not echo the secret values** — read them from `/home/claude/dev/padel/.env` and set them directly. Run:
 ```bash
 export CONVEX_SELF_HOSTED_URL=http://127.0.0.1:3220
 export CONVEX_SELF_HOSTED_ADMIN_KEY="$(docker exec convex-tennis bash /convex/generate_admin_key.sh)"
 cd /home/claude/dev/tennis
-npx convex env set SMTP_HOST <padel smtp host>
-npx convex env set SMTP_PORT 465
-npx convex env set SMTP_USER <padel smtp user>
-npx convex env set SMTP_PASS <padel smtp pass>
-npx convex env set APP_URL https://tennis.aidigitalassistant.cloud
+set -a; . /home/claude/dev/padel/.env; set +a   # loads GOOGLE_* into the shell without printing
+npx convex env set GOOGLE_CLIENT_ID "$GOOGLE_CLIENT_ID"
+npx convex env set GOOGLE_CLIENT_SECRET "$GOOGLE_CLIENT_SECRET"
+npx convex env set GOOGLE_REFRESH_TOKEN "$GOOGLE_REFRESH_TOKEN"
+npx convex env set GMAIL_FROM "Dragon Tennis <padel.asdragon@gmail.com>"
+npx convex env set APP_URL http://localhost:3001   # local-only phase; switch to public URL at deploy
+npx convex env list | grep -E 'GOOGLE_|GMAIL_FROM|APP_URL'
 ```
-Expected: each `set` confirms; `npx convex env list` shows all five.
+Expected: `npx convex env list` shows `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `GMAIL_FROM`, `APP_URL` (values masked).
 
-- [ ] **Step 2: Write the email action**
+- [ ] **Step 2: Write the email action** (ports padel's `utils/gmailSender.js` Gmail API logic)
 
 `convex/email.ts`:
 ```ts
 "use node";
 
 import { v } from "convex/values";
-import nodemailer from "nodemailer";
+import { google } from "googleapis";
 import { internalAction } from "./_generated/server";
+
+function buildRawMessage(from: string, to: string, subject: string, html: string) {
+  const lines = [
+    'Content-Type: text/html; charset="UTF-8"',
+    "MIME-Version: 1.0",
+    `From: ${from}`,
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    "",
+    html,
+  ];
+  return Buffer.from(lines.join("\n"))
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
 
 export const sendInvite = internalAction({
   args: { email: v.string(), token: v.string() },
   handler: async (_ctx, { email, token }) => {
-    const appUrl = process.env.APP_URL ?? "https://tennis.aidigitalassistant.cloud";
+    const appUrl = process.env.APP_URL ?? "http://localhost:3001";
     const link = `${appUrl}/accept-invite/${token}`;
+    const from = process.env.GMAIL_FROM ?? "Dragon Tennis <padel.asdragon@gmail.com>";
 
-    const host = process.env.SMTP_HOST;
-    if (!host) {
-      // Dev fallback: no SMTP configured — log the link so the flow is still testable.
-      console.log(`[invite] (no SMTP) lien pour ${email}: ${link}`);
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    if (!clientId) {
+      // Fallback: no OAuth configured — log the link so the flow stays testable.
+      console.log(`[invite] (no Gmail creds) lien pour ${email}: ${link}`);
       return;
     }
 
-    const transport = nodemailer.createTransport({
-      host,
-      port: Number(process.env.SMTP_PORT ?? 465),
-      secure: Number(process.env.SMTP_PORT ?? 465) === 465,
-      auth: { user: process.env.SMTP_USER!, pass: process.env.SMTP_PASS! },
-    });
+    const oauth2Client = new google.auth.OAuth2(
+      clientId,
+      process.env.GOOGLE_CLIENT_SECRET,
+      "http://localhost:3000",
+    );
+    oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
+    const { credentials } = await oauth2Client.refreshAccessToken();
+    oauth2Client.setCredentials(credentials);
 
-    await transport.sendMail({
-      from: `"Dragon Tennis" <${process.env.SMTP_USER}>`,
-      to: email,
-      subject: "Votre invitation — Dragon Tennis",
-      html: `<p>Bonjour,</p>
+    const gmail = google.gmail({ version: "v1", auth: oauth2Client });
+    const html = `<p>Bonjour,</p>
 <p>Vous avez été invité à rejoindre l'application Dragon Tennis.</p>
-<p><a href="${link}">Cliquez ici pour définir votre mot de passe</a> (lien valable 7 jours).</p>`,
+<p><a href="${link}">Cliquez ici pour définir votre mot de passe</a> (lien valable 7 jours).</p>`;
+
+    const result = await gmail.users.messages.send({
+      userId: "me",
+      requestBody: { raw: buildRawMessage(from, email, "Votre invitation — Dragon Tennis", html) },
     });
-    console.log(`[invite] email envoyé à ${email}`);
+    console.log(`[invite] email envoyé à ${email} (id ${result.data.id})`);
   },
 });
 ```
 
-Register `email` in `convex/_generated/api.d.ts`.
+Register `email` in `convex/_generated/api.d.ts` (3-step manual process).
 
 - [ ] **Step 3: Schedule the email from `createMember`**
 
-In `convex/members.ts`, add the import and schedule call. At the top:
+In `convex/members.ts`, add the import at the top:
 ```ts
 import { internal } from "./_generated/api";
 ```
-Replace the `createMember` handler body's return with:
+Replace the `createMember` handler body so it schedules the email after inserting the invite:
 ```ts
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
@@ -978,18 +1020,18 @@ Run:
 export CONVEX_SELF_HOSTED_URL=http://127.0.0.1:3220
 export CONVEX_SELF_HOSTED_ADMIN_KEY="$(docker exec convex-tennis bash /convex/generate_admin_key.sh)"
 cd /home/claude/dev/tennis && npx convex deploy
-# Trigger the action directly to confirm SMTP works (or logs the link):
+# Trigger the action directly to confirm Gmail send works (sends a real email to the admin):
 npx convex run email:sendInvite '{"email":"neotokyo.794@gmail.com","token":"test-token"}'
 npx convex logs --limit 20
 ```
-Expected: deploy succeeds; the logs show either `[invite] email envoyé à ...` (SMTP set) or `[invite] (no SMTP) lien pour ...` with the accept-invite URL.
+Expected: deploy succeeds; the logs show `[invite] email envoyé à neotokyo.794@gmail.com (id ...)` and the test email arrives. (If creds are absent, logs show `[invite] (no Gmail creds) lien pour ...` with the URL.)
 
 - [ ] **Step 5: Commit**
 
 ```bash
 cd /home/claude/dev/tennis
 git add convex/email.ts convex/members.ts convex/_generated
-git commit -m "feat(email): nodemailer invite action wired into createMember"
+git commit -m "feat(email): Gmail API invite action (ported from padel) wired into createMember"
 ```
 
 ---
