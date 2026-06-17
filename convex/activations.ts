@@ -133,10 +133,11 @@ export const listMine = query({
   handler: async (ctx) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Non authentifié");
-    const all = await ctx.db.query("activations").collect();
-    return all
-      .filter((a) => a.userId === userId)
-      .sort((a, b) => b.startTime - a.startTime);
+    const mine = await ctx.db
+      .query("activations")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    return mine.sort((a, b) => b.startTime - a.startTime);
   },
 });
 

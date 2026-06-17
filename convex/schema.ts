@@ -49,7 +49,9 @@ export default defineSchema({
     activationId: v.optional(v.id("activations")),
     reversalOf: v.optional(v.id("transactions")),
     createdAt: v.number(),
-  }).index("by_user", ["userId"]),
+  })
+    .index("by_user", ["userId"])
+    .index("by_reversal", ["reversalOf"]),
 
   activations: defineTable({
     userId: v.id("users"),
@@ -64,7 +66,9 @@ export default defineSchema({
     endTime: v.number(),
     netatmoResponse: v.optional(v.string()),
     transactionId: v.optional(v.id("transactions")),
-  }).index("by_status", ["status"]),
+  })
+    .index("by_status", ["status"])
+    .index("by_user", ["userId"]),
 
   legrandTokens: defineTable({
     accessToken: v.string(),

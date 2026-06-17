@@ -38,13 +38,11 @@ export const reverseTransaction = mutation({
     if (target.type === "reversal") throw new Error("Une annulation ne peut pas être annulée");
 
     // Refuse double-reversal: bail if a reversal already points at this transaction.
-    const already = await ctx.db
+    const existingReversal = await ctx.db
       .query("transactions")
-      .withIndex("by_user", (q) => q.eq("userId", target.userId))
-      .collect();
-    if (already.some((t) => t.reversalOf === transactionId)) {
-      throw new Error("Transaction déjà annulée");
-    }
+      .withIndex("by_reversal", (q) => q.eq("reversalOf", transactionId))
+      .first();
+    if (existingReversal) throw new Error("Transaction déjà annulée");
 
     const user = await ctx.db.get(target.userId);
     if (!user) throw new Error("Utilisateur introuvable");
