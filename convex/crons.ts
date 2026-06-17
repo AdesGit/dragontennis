@@ -15,4 +15,10 @@ crons.interval(
   internal.legrand.refreshToken,
 );
 
+crons.interval(
+  "reap-stuck-pending",
+  { minutes: 5 },
+  internal.activations.reapStuck,
+);
+
 export default crons;

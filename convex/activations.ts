@@ -118,7 +118,19 @@ export const activateLight = action({
       });
       return { amount: begun.amount, balanceAfter: begun.balanceAfter, endTime: begun.endTime };
     } catch (err: unknown) {
-      // Hardware/API failure → reverse the debit so the member is not charged.
+      // The light may have physically turned on (setstate ok, confirm failed). Best-effort
+      // turn it off so we never leave a lit court that the cron won't catch (it only sweeps
+      // "active"). Ignore off-errors — the reaper + turnoff cron are the backstop.
+      try {
+        await ctx.runAction(internal.legrand.netatmoSetState, {
+          homeId: begun.homeId,
+          moduleId: begun.moduleId,
+          bridgeId: begun.bridgeId,
+          on: false,
+        });
+      } catch {
+        // swallow — refund proceeds regardless
+      }
       await ctx.runMutation(internal.activations.failActivation, {
         activationId: begun.activationId,
         reason: err instanceof Error ? err.message : String(err),
@@ -166,6 +178,48 @@ export const markUsed = internalMutation({
   args: { activationId: v.id("activations"), netatmoResponse: v.string() },
   handler: async (ctx, { activationId, netatmoResponse }) => {
     await ctx.db.patch(activationId, { status: "used", netatmoResponse });
+  },
+});
+
+const STUCK_GRACE_MS = 3 * 60 * 1000; // an activateLight action cannot legitimately run this long
+
+export const stuckPending = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const cutoff = Date.now() - STUCK_GRACE_MS;
+    const pending = await ctx.db
+      .query("activations")
+      .withIndex("by_status", (q) => q.eq("status", "pending"))
+      .collect();
+    return pending.filter((a) => a.startTime < cutoff);
+  },
+});
+
+export const reapStuck = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    const stuck = await ctx.runQuery(internal.activations.stuckPending, {});
+    for (const a of stuck) {
+      // The action died mid-flow; the light state is uncertain. Best-effort turn off, then
+      // reverse the debit (failActivation only acts on "pending", so this is idempotent).
+      const courtRow = await ctx.runQuery(internal.courts.byNumber, { courtNumber: a.court });
+      if (courtRow) {
+        try {
+          await ctx.runAction(internal.legrand.netatmoSetState, {
+            homeId: courtRow.homeId,
+            moduleId: courtRow.moduleId,
+            bridgeId: courtRow.bridgeId,
+            on: false,
+          });
+        } catch {
+          // swallow
+        }
+      }
+      await ctx.runMutation(internal.activations.failActivation, {
+        activationId: a._id,
+        reason: "Activation bloquée (pending) — recréditée par le reaper",
+      });
+    }
   },
 });
 
