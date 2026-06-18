@@ -1,24 +1,26 @@
 "use node";
 
 import { v } from "convex/values";
-import { google } from "googleapis";
+import nodemailer from "nodemailer";
 import { internalAction } from "./_generated/server";
 
-function buildRawMessage(from: string, to: string, subject: string, html: string) {
-  const lines = [
-    'Content-Type: text/html; charset="UTF-8"',
-    "MIME-Version: 1.0",
-    `From: ${from}`,
-    `To: ${to}`,
-    `Subject: ${subject}`,
-    "",
-    html,
-  ];
-  return Buffer.from(lines.join("\n"))
-    .toString("base64")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
+// Gmail SMTP via an app password (GMAIL_USER + GMAIL_APP_PASSWORD). Returns null when
+// creds are absent so callers can fall back to logging (local dev / unconfigured).
+function getTransport() {
+  const user = process.env.GMAIL_USER;
+  const pass = (process.env.GMAIL_APP_PASSWORD ?? "").replace(/\s+/g, ""); // app passwords are shown in 4-char groups
+  if (!user || !pass) return null;
+  return nodemailer.createTransport({
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
+    auth: { user, pass },
+  });
+}
+
+function fromAddress() {
+  const user = process.env.GMAIL_USER ?? "padel.asdragon@gmail.com";
+  return process.env.GMAIL_FROM ?? `Dragon Tennis <${user}>`;
 }
 
 export const sendInvite = internalAction({
@@ -26,84 +28,51 @@ export const sendInvite = internalAction({
   handler: async (_ctx, { email, token }) => {
     const appUrl = process.env.APP_URL ?? "http://localhost:3001";
     const link = `${appUrl}/accept-invite/${token}`;
-    const from = process.env.GMAIL_FROM ?? "Dragon Tennis <padel.asdragon@gmail.com>";
 
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-    if (!clientId) {
-      // Fallback: no OAuth configured — log the link so the flow stays testable.
-      console.log(`[invite] (no Gmail creds) lien pour ${email}: ${link}`);
+    const transport = getTransport();
+    if (!transport) {
+      // Fallback: no SMTP configured — log the link so the flow stays testable.
+      console.log(`[invite] (no SMTP creds) lien pour ${email}: ${link}`);
       return;
     }
 
-    const oauth2Client = new google.auth.OAuth2(
-      clientId,
-      process.env.GOOGLE_CLIENT_SECRET,
-      "http://localhost:3000",
-    );
-    oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
-    const { credentials } = await oauth2Client.refreshAccessToken();
-    oauth2Client.setCredentials(credentials);
-
-    const gmail = google.gmail({ version: "v1", auth: oauth2Client });
     const html = `<p>Bonjour,</p>
 <p>Vous avez été invité à rejoindre l'application Dragon Tennis.</p>
 <p><a href="${link}">Cliquez ici pour définir votre mot de passe</a> (lien valable 7 jours).</p>`;
 
-    const result = await gmail.users.messages.send({
-      userId: "me",
-      requestBody: { raw: buildRawMessage(from, email, "Votre invitation — Dragon Tennis", html) },
+    const info = await transport.sendMail({
+      from: fromAddress(),
+      to: email,
+      subject: "Votre invitation — Dragon Tennis",
+      text: `Vous avez été invité à rejoindre Dragon Tennis.\nDéfinissez votre mot de passe : ${link}\n(Lien valable 7 jours.)`,
+      html,
     });
-    console.log(`[invite] email envoyé à ${email} (id ${result.data.id})`);
+    console.log(`[invite] email envoyé à ${email} (id ${info.messageId})`);
   },
 });
 
-// Why: sendVerificationRequest in ResetEmail.ts runs in Convex V8 runtime (imported by auth.ts),
-// so googleapis (Node.js built-ins) cannot be used there. This action runs in the Node.js
-// runtime ("use node") and is called via ctx.runAction from the V8-safe ResetEmail provider.
+// Why: sendVerificationRequest in ResetEmail.ts runs in the Convex V8 runtime (imported by
+// auth.ts), where nodemailer's Node.js built-ins are unavailable. This action runs in the
+// Node.js runtime ("use node") and is called via ctx.runAction from the V8-safe ResetEmail.
 export const sendResetCode = internalAction({
   args: { email: v.string(), token: v.string() },
   handler: async (_ctx, { email, token }) => {
-    const from = process.env.GMAIL_FROM ?? "Dragon Tennis <padel.asdragon@gmail.com>";
-    const html = `<p>Votre code de réinitialisation Dragon Tennis : <strong>${token}</strong></p>
-<p>Il expire dans 15 minutes.</p>`;
-
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-    if (!clientId) {
-      console.log(`[reset] (no Gmail creds) code pour ${email}: ${token}`);
+    const transport = getTransport();
+    if (!transport) {
+      console.log(`[reset] (no SMTP creds) code pour ${email}: ${token}`);
       return;
     }
 
-    const oauth2 = new google.auth.OAuth2(
-      clientId,
-      process.env.GOOGLE_CLIENT_SECRET,
-      "http://localhost:3000",
-    );
-    oauth2.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
-    const { credentials } = await oauth2.refreshAccessToken();
-    oauth2.setCredentials(credentials);
-    const gmail = google.gmail({ version: "v1", auth: oauth2 });
+    const html = `<p>Votre code de réinitialisation Dragon Tennis : <strong>${token}</strong></p>
+<p>Il expire dans 15 minutes.</p>`;
 
-    function buildRaw(from: string, to: string, subject: string, html: string) {
-      const lines = [
-        'Content-Type: text/html; charset="UTF-8"',
-        "MIME-Version: 1.0",
-        `From: ${from}`,
-        `To: ${to}`,
-        `Subject: ${subject}`,
-        "",
-        html,
-      ];
-      return Buffer.from(lines.join("\n"))
-        .toString("base64")
-        .replace(/\+/g, "-")
-        .replace(/\//g, "_")
-        .replace(/=+$/, "");
-    }
-
-    const result = await gmail.users.messages.send({
-      userId: "me",
-      requestBody: { raw: buildRaw(from, email, "Réinitialisation — Dragon Tennis", html) },
+    const info = await transport.sendMail({
+      from: fromAddress(),
+      to: email,
+      subject: "Réinitialisation — Dragon Tennis",
+      text: `Votre code de réinitialisation Dragon Tennis : ${token}\nIl expire dans 15 minutes.`,
+      html,
     });
-    console.log(`[reset] email envoyé à ${email} (id ${result.data.id})`);
+    console.log(`[reset] email envoyé à ${email} (id ${info.messageId})`);
   },
 });

@@ -30,9 +30,10 @@ export const ResetEmail = Email({
     { identifier: email, token }: { identifier: string; token: string },
     ctx?: ActionCtxLike,
   ) => {
-    // Dry-run guard: log when Gmail creds are absent (local dev / CI)
-    if (!process.env.GOOGLE_CLIENT_ID) {
-      console.log(`[reset] (no Gmail creds) code pour ${email}: ${token}`);
+    // Dry-run guard: log when SMTP creds are absent (local dev / CI). When configured,
+    // delegate to the "use node" action below (nodemailer can't run in this V8 bundle).
+    if (!process.env.GMAIL_USER) {
+      console.log(`[reset] (no SMTP creds) code pour ${email}: ${token}`);
       return;
     }
     if (!ctx) {
