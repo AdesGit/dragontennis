@@ -57,20 +57,26 @@ export const sendInvite = internalAction({
 export const sendResetCode = internalAction({
   args: { email: v.string(), token: v.string() },
   handler: async (_ctx, { email, token }) => {
+    const appUrl = process.env.APP_URL ?? "http://localhost:3001";
+    // The code travels in the link so the user only types a new password on /reset-password.
+    const link = `${appUrl}/reset-password?email=${encodeURIComponent(email)}&code=${encodeURIComponent(token)}`;
+
     const transport = getTransport();
     if (!transport) {
-      console.log(`[reset] (no SMTP creds) code pour ${email}: ${token}`);
+      console.log(`[reset] (no SMTP creds) lien pour ${email}: ${link}`);
       return;
     }
 
-    const html = `<p>Votre code de réinitialisation Dragon Tennis : <strong>${token}</strong></p>
-<p>Il expire dans 15 minutes.</p>`;
+    const html = `<p>Bonjour,</p>
+<p>Pour réinitialiser votre mot de passe Dragon Tennis, cliquez sur le lien ci-dessous (valable 15 minutes) :</p>
+<p><a href="${link}">Réinitialiser mon mot de passe</a></p>
+<p style="color:#666;font-size:13px">Si le bouton ne fonctionne pas, copiez ce lien : ${link}</p>`;
 
     const info = await transport.sendMail({
       from: fromAddress(),
       to: email,
       subject: "Réinitialisation — Dragon Tennis",
-      text: `Votre code de réinitialisation Dragon Tennis : ${token}\nIl expire dans 15 minutes.`,
+      text: `Pour réinitialiser votre mot de passe Dragon Tennis, ouvrez ce lien (valable 15 minutes) :\n${link}`,
       html,
     });
     console.log(`[reset] email envoyé à ${email} (id ${info.messageId})`);

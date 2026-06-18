@@ -2,38 +2,21 @@
 
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
 export function ForgotPasswordForm() {
   const { signIn } = useAuthActions();
-  const router = useRouter();
-  const [step, setStep] = useState<"request" | "verify">("request");
   const [email, setEmail] = useState("");
+  const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  if (step === "request") {
+  if (sent) {
     return (
-      <form
-        className="flex w-full max-w-sm flex-col gap-4"
-        onSubmit={async (e) => {
-          e.preventDefault();
-          setError(null);
-          try {
-            await signIn("password", { email, flow: "reset" });
-            setStep("verify");
-          } catch {
-            setError("Impossible d'envoyer le code.");
-          }
-        }}
-      >
-        <input
-          type="email" required value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="Email" className="rounded border border-gray-300 px-3 py-2"
-        />
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        <button className="rounded bg-blue-600 px-4 py-2 text-white">Envoyer le code</button>
-      </form>
+      <p className="max-w-sm text-center text-sm text-muted-foreground">
+        Si un compte existe pour <strong>{email}</strong>, un email contenant un lien de
+        réinitialisation vient d&apos;être envoyé. Cliquez sur le lien pour choisir un nouveau
+        mot de passe (lien valable 15 minutes). Pensez à vérifier vos spams.
+      </p>
     );
   }
 
@@ -43,26 +26,32 @@ export function ForgotPasswordForm() {
       onSubmit={async (e) => {
         e.preventDefault();
         setError(null);
-        const fd = new FormData(e.currentTarget);
+        setSubmitting(true);
         try {
-          await signIn("password", {
-            email,
-            code: String(fd.get("code")),
-            newPassword: String(fd.get("newPassword")),
-            flow: "reset-verification",
-          });
-          router.push("/");
+          await signIn("password", { email, flow: "reset" });
+          setSent(true);
         } catch {
-          setError("Code invalide ou expiré.");
+          setError("Impossible d'envoyer l'email. Réessayez dans un instant.");
+          setSubmitting(false);
         }
       }}
     >
-      <input name="code" required placeholder="Code reçu par email"
-        className="rounded border border-gray-300 px-3 py-2" />
-      <input name="newPassword" type="password" required minLength={8}
-        placeholder="Nouveau mot de passe" className="rounded border border-gray-300 px-3 py-2" />
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <button className="rounded bg-blue-600 px-4 py-2 text-white">Réinitialiser</button>
+      <input
+        type="email"
+        required
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="Votre email"
+        className="rounded border border-input px-3 py-2"
+      />
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      <button
+        type="submit"
+        disabled={submitting}
+        className="rounded bg-primary px-4 py-2 font-medium text-primary-foreground disabled:opacity-50"
+      >
+        {submitting ? "Envoi…" : "Envoyer le lien de réinitialisation"}
+      </button>
     </form>
   );
 }
