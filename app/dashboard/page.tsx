@@ -2,15 +2,14 @@
 
 import { AuthGate } from "@/components/AuthGate";
 import { MemberDashboard } from "@/components/MemberDashboard";
-import { NavBar } from "@/components/NavBar";
+import { AppShell } from "@/components/app/AppShell";
 
 export default function DashboardPage() {
   return (
     <AuthGate>
-      <main className="mx-auto max-w-2xl p-6">
-        <NavBar title="Mon espace" />
+      <AppShell title="Mon espace">
         <MemberDashboard />
-      </main>
+      </AppShell>
     </AuthGate>
   );
 }

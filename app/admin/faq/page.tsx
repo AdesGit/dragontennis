@@ -2,15 +2,14 @@
 
 import { AdminGate } from "@/components/AdminGate";
 import { FaqAdminPanel } from "@/components/FaqAdminPanel";
-import { NavBar } from "@/components/NavBar";
+import { AppShell } from "@/components/app/AppShell";
 
 export default function AdminFaqPage() {
   return (
     <AdminGate>
-      <main className="mx-auto max-w-2xl p-6">
-        <NavBar title="Gérer la FAQ" />
+      <AppShell title="Gérer la FAQ">
         <FaqAdminPanel />
-      </main>
+      </AppShell>
     </AdminGate>
   );
 }

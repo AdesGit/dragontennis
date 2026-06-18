@@ -2,15 +2,14 @@
 
 import { AdminGate } from "@/components/AdminGate";
 import { MembersPanel } from "@/components/MembersPanel";
-import { NavBar } from "@/components/NavBar";
+import { AppShell } from "@/components/app/AppShell";
 
 export default function MembersPage() {
   return (
     <AdminGate>
-      <main className="mx-auto max-w-2xl p-6">
-        <NavBar title="Membres" />
+      <AppShell title="Membres">
         <MembersPanel />
-      </main>
+      </AppShell>
     </AdminGate>
   );
 }

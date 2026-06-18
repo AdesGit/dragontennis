@@ -2,15 +2,14 @@
 
 import { AuthGate } from "@/components/AuthGate";
 import { FaqList } from "@/components/FaqList";
-import { NavBar } from "@/components/NavBar";
+import { AppShell } from "@/components/app/AppShell";
 
 export default function FaqPage() {
   return (
     <AuthGate>
-      <main className="mx-auto max-w-2xl p-6">
-        <NavBar title="FAQ" />
+      <AppShell title="FAQ">
         <FaqList />
-      </main>
+      </AppShell>
     </AuthGate>
   );
 }
