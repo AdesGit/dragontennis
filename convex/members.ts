@@ -69,6 +69,82 @@ export const seedAdminInvite = internalMutation({
   },
 });
 
+// Promote a member to admin (or revert to user). Guards against removing the last admin
+// so the club can never lock itself out of the admin area.
+export const setMemberRole = mutation({
+  args: {
+    userId: v.id("users"),
+    role: v.union(v.literal("admin"), v.literal("user")),
+  },
+  handler: async (ctx, { userId, role }) => {
+    await requireAdmin(ctx);
+    const user = await ctx.db.get(userId);
+    if (!user) throw new Error("Membre introuvable");
+    if (role === "user" && user.role === "admin") {
+      const admins = (await ctx.db.query("users").collect()).filter((u) => u.role === "admin");
+      if (admins.length <= 1) throw new Error("Impossible de retirer le dernier administrateur");
+    }
+    await ctx.db.patch(userId, { role });
+  },
+});
+
+// Permanently delete a member and every row that references it (ledger, activations,
+// auth account/sessions/refresh tokens, invites). Admins cannot delete themselves nor
+// the last remaining admin.
+export const deleteMember = mutation({
+  args: { userId: v.id("users") },
+  handler: async (ctx, { userId }) => {
+    const adminId = await requireAdmin(ctx);
+    if (userId === adminId) throw new Error("Vous ne pouvez pas supprimer votre propre compte");
+    const user = await ctx.db.get(userId);
+    if (!user) throw new Error("Membre introuvable");
+    if (user.role === "admin") {
+      const admins = (await ctx.db.query("users").collect()).filter((u) => u.role === "admin");
+      if (admins.length <= 1) throw new Error("Impossible de supprimer le dernier administrateur");
+    }
+
+    const txns = await ctx.db
+      .query("transactions")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    for (const t of txns) await ctx.db.delete(t._id);
+
+    const acts = await ctx.db
+      .query("activations")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    for (const a of acts) await ctx.db.delete(a._id);
+
+    const accounts = await ctx.db.query("authAccounts").collect();
+    for (const acc of accounts) {
+      if (acc.userId === userId) await ctx.db.delete(acc._id);
+    }
+
+    const sessions = await ctx.db.query("authSessions").collect();
+    const sessionIds = new Set<string>();
+    for (const s of sessions) {
+      if (s.userId === userId) sessionIds.add(s._id);
+    }
+    const tokens = await ctx.db.query("authRefreshTokens").collect();
+    for (const tk of tokens) {
+      if (sessionIds.has(tk.sessionId)) await ctx.db.delete(tk._id);
+    }
+    for (const s of sessions) {
+      if (s.userId === userId) await ctx.db.delete(s._id);
+    }
+
+    if (user.email) {
+      const invs = await ctx.db
+        .query("invites")
+        .withIndex("by_email", (q) => q.eq("email", user.email!))
+        .collect();
+      for (const i of invs) await ctx.db.delete(i._id);
+    }
+
+    await ctx.db.delete(userId);
+  },
+});
+
 export const getInviteByToken = query({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {

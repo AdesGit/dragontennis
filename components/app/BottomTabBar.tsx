@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Zap, HelpCircle, Shield, type LucideIcon } from "lucide-react";
+import { Home, HelpCircle, Shield, type LucideIcon } from "lucide-react";
 import { useQuery } from "convex/react";
 
 import { api } from "@/convex/_generated/api";
@@ -12,7 +12,6 @@ type Tab = { href: string; label: string; icon: LucideIcon };
 
 const MEMBER_TABS: Tab[] = [
   { href: "/dashboard", label: "Accueil", icon: Home },
-  { href: "/activate", label: "Activer", icon: Zap },
   { href: "/faq", label: "FAQ", icon: HelpCircle },
 ];
 

@@ -153,6 +153,41 @@ export const listMine = query({
   },
 });
 
+// Currently-lit courts across all members, with who lit each one and when it ends.
+// Authenticated (any member) — mirrors the source padel app where the live court status
+// (user + remaining time) is visible to everyone, not just admins.
+export const activeCourts = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Non authentifié");
+    const now = Date.now();
+    const active = await ctx.db
+      .query("activations")
+      .withIndex("by_status", (q) => q.eq("status", "active"))
+      .collect();
+    // One row per court: the most recent live session wins.
+    const byCourt = new Map<number, (typeof active)[number]>();
+    for (const a of active.filter((a) => a.endTime > now).sort((x, y) => y.startTime - x.startTime)) {
+      if (!byCourt.has(a.court)) byCourt.set(a.court, a);
+    }
+    return Promise.all(
+      [...byCourt.values()].map(async (a) => {
+        const u = await ctx.db.get(a.userId);
+        return {
+          court: a.court,
+          firstName: u?.firstName ?? null,
+          lastName: u?.lastName ?? null,
+          isMine: a.userId === userId,
+          startTime: a.startTime,
+          endTime: a.endTime,
+          durationMin: a.durationMin,
+        };
+      }),
+    );
+  },
+});
+
 export const listAll = query({
   args: {},
   handler: async (ctx) => {
