@@ -12,33 +12,31 @@ export const list = query({
   },
 });
 
-// Idempotent seed of the 3 tennis courts. Module IDs are PLACEHOLDERS shared from the
-// padel Netatmo home — the real tennis court module IDs must be set by an admin via
-// courts.upsert (or here) once known. homeId/bridgeId default to padel's values.
+// Idempotent seed of the 3 tennis courts, mapped to the real Netatmo (Legrand) home
+// "Dragontennis". Module IDs are the NLPT contactors discovered via homesdata
+// (2026-06-20): court 1 = Light1gauche, 2 = Light2milieu, 3 = Light3droite. Upserts so
+// re-running corrects any stale row; admins can still override via courts.upsert.
 export const seedCourts = internalMutation({
   args: {},
   handler: async (ctx) => {
-    const HOME = "66d96885a841f16b310e468f";
-    const BRIDGE = "00:04:74:44:8e:24";
+    const HOME = "6a238705c1430b42a60b1bf3";
+    const BRIDGE = "00:04:74:48:7a:02";
     const defaults = [
-      { courtNumber: 1, label: "Court 1", moduleId: "PLACEHOLDER_COURT1" },
-      { courtNumber: 2, label: "Court 2", moduleId: "PLACEHOLDER_COURT2" },
-      { courtNumber: 3, label: "Court 3", moduleId: "PLACEHOLDER_COURT3" },
+      { courtNumber: 1, label: "Court 1", moduleId: "00:04:74:00:01:25:f2:4f" },
+      { courtNumber: 2, label: "Court 2", moduleId: "00:04:74:00:01:25:c1:ce" },
+      { courtNumber: 3, label: "Court 3", moduleId: "00:04:74:00:01:25:e6:50" },
     ];
     for (const d of defaults) {
+      const row = { ...d, bridgeId: BRIDGE, homeId: HOME, active: true };
       const existing = await ctx.db
         .query("courts")
         .withIndex("by_court", (q) => q.eq("courtNumber", d.courtNumber))
         .first();
-      if (existing) continue;
-      await ctx.db.insert("courts", {
-        courtNumber: d.courtNumber,
-        label: d.label,
-        moduleId: d.moduleId,
-        bridgeId: BRIDGE,
-        homeId: HOME,
-        active: true,
-      });
+      if (existing) {
+        await ctx.db.patch(existing._id, row);
+      } else {
+        await ctx.db.insert("courts", row);
+      }
     }
   },
 });
