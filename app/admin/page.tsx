@@ -4,6 +4,7 @@ import Link from "next/link";
 import {
   BarChart3,
   HelpCircle,
+  KeyRound,
   Receipt,
   Users,
   Wallet,
@@ -25,6 +26,7 @@ const TILES: AdminTile[] = [
   { href: "/credits", label: "Créditer", icon: Wallet },
   { href: "/history", label: "Historique", icon: Receipt },
   { href: "/admin/faq", label: "Gérer FAQ", icon: HelpCircle },
+  { href: "/tokenManagementLegrand", label: "Tokens Legrand", icon: KeyRound },
 ];
 
 export default function AdminPage() {

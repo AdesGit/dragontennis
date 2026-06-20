@@ -4,15 +4,24 @@
 // (queries/mutations cannot live in a "use node" file — Convex constraint).
 import { v } from "convex/values";
 import axios from "axios";
-import { internalAction } from "./_generated/server";
-import { internal } from "./_generated/api";
+import { randomUUID } from "crypto";
+import { action, internalAction, type ActionCtx } from "./_generated/server";
+import { api, internal } from "./_generated/api";
 
 const NETATMO = "https://api.netatmo.com";
 const SAFETY_MARGIN_MS = 60 * 1000;
 const RETRYABLE = new Set([429, 502, 503, 504]);
+// Scopes needed to read and switch Legrand (Magellan) lights.
+const SCOPES = "read_magellan write_magellan";
 
 function dryRun() {
   return !process.env.NETATMO_CLIENT_ID;
+}
+
+// Admin gate usable from actions (no ctx.db) — defers to the V8 users.getMe query.
+async function requireAdminAction(ctx: ActionCtx) {
+  const me = await ctx.runQuery(api.users.getMe, {});
+  if (!me || me.role !== "admin") throw new Error("Accès réservé à l'administrateur");
 }
 
 // Operator bootstrap — inserts the initial refresh token (expired access token
@@ -102,5 +111,88 @@ export const netatmoSetState = internalAction({
       }
     }
     throw lastErr;
+  },
+});
+
+// --- "Login with Legrand" OAuth (authorization_code) -------------------------
+
+// Admin starts the login: returns the Netatmo authorize URL the browser must visit.
+// A one-time `state` nonce guards the callback against CSRF.
+export const startLogin = action({
+  args: {},
+  handler: async (ctx): Promise<{ url: string }> => {
+    await requireAdminAction(ctx);
+    const clientId = process.env.NETATMO_CLIENT_ID;
+    const redirectUri = process.env.NETATMO_REDIRECT_URI;
+    if (!clientId || !redirectUri) {
+      throw new Error(
+        "NETATMO_CLIENT_ID / NETATMO_REDIRECT_URI manquantes dans l'env Convex",
+      );
+    }
+    const state = randomUUID();
+    await ctx.runMutation(internal.legrandDb.createOAuthState, { state });
+    const url =
+      `${NETATMO}/oauth2/authorize?client_id=${encodeURIComponent(clientId)}` +
+      `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+      `&response_type=code&scope=${encodeURIComponent(SCOPES)}` +
+      `&state=${encodeURIComponent(state)}`;
+    return { url };
+  },
+});
+
+// Called only by the /legrand/callback HTTP action after Netatmo redirects back.
+export const exchangeCode = internalAction({
+  args: { code: v.string() },
+  handler: async (ctx, { code }): Promise<void> => {
+    const clientId = process.env.NETATMO_CLIENT_ID;
+    const clientSecret = process.env.NETATMO_CLIENT_SECRET;
+    const redirectUri = process.env.NETATMO_REDIRECT_URI;
+    if (!clientId || !clientSecret || !redirectUri) {
+      throw new Error("NETATMO_* manquantes dans l'env Convex");
+    }
+    const params = new URLSearchParams({
+      grant_type: "authorization_code",
+      client_id: clientId,
+      client_secret: clientSecret,
+      code,
+      redirect_uri: redirectUri,
+      scope: SCOPES,
+    });
+    let resp;
+    try {
+      resp = await axios.post(`${NETATMO}/oauth2/token`, params.toString(), {
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        timeout: 10000,
+      });
+    } catch (err: unknown) {
+      // Surface Netatmo's actual OAuth error (invalid_client / invalid_grant / ...)
+      // — these are not secret and are essential to diagnose the exchange failure.
+      if (axios.isAxiosError(err)) {
+        const status = err.response?.status;
+        const data = err.response?.data;
+        console.error(
+          `[legrand] exchangeCode failed: status=${status} body=${JSON.stringify(data)}`,
+        );
+        const code =
+          (data && (data.error as string)) || `http_${status ?? "no_response"}`;
+        throw new Error(`netatmo_${code}`);
+      }
+      console.error("[legrand] exchangeCode non-axios error:", err);
+      throw err;
+    }
+    await ctx.runMutation(internal.legrandDb.storeToken, {
+      accessToken: resp.data.access_token as string,
+      refreshToken: resp.data.refresh_token as string,
+      expiresIn: resp.data.expires_in as number,
+    });
+  },
+});
+
+// Admin-triggered manual refresh of the access token.
+export const manualRefresh = action({
+  args: {},
+  handler: async (ctx): Promise<void> => {
+    await requireAdminAction(ctx);
+    await ctx.runAction(internal.legrand.refreshToken, {});
   },
 });

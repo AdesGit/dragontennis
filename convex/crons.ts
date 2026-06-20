@@ -9,9 +9,10 @@ crons.interval(
   internal.activations.turnoffDue,
 );
 
+// Token Netatmo valable 3h → refresh toutes les 2h (marge ~1h avant expiration).
 crons.interval(
   "refresh-legrand",
-  { minutes: 30 },
+  { hours: 2 },
   internal.legrand.refreshToken,
 );
 

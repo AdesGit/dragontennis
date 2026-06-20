@@ -6,6 +6,7 @@
 - DNS (A → 72.62.129.117) : `dragontennis.aidigitalassistant.cloud` (app), `convex-tennis.aidigitalassistant.cloud` (backend).
 - TLS : Let's Encrypt via `certbot --nginx` (renouvellement auto).
 - nginx : vhosts `/etc/nginx/sites-available/{dragontennis,convex-tennis}` (proxy app `:3001`, Convex sync `:3220` + http-actions/OIDC `:3221`).
+  - ⚠️ Cloud et site partagent **le même domaine** → nginx route par **chemin** : `/.well-known/`, `/http/` et `/legrand/` partent vers les http-actions (`:3221`), le reste vers le sync (`:3220`). **Toute nouvelle route HTTP action sous un préfixe inédit doit recevoir son `location … → :3221`** dans `sites-available/convex-tennis`, sinon elle tombe sur le sync et renvoie 404. Après édition : `sudo nginx -t && sudo systemctl reload nginx`.
 
 ## Convex (backend)
 

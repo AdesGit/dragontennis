@@ -77,6 +77,13 @@ export default defineSchema({
     obtainedAt: v.number(),
   }),
 
+  // Short-lived CSRF nonces for the "Login with Legrand" OAuth flow. Created when an
+  // admin starts the login, consumed (and deleted) by the /legrand/callback HTTP action.
+  legrandOAuthStates: defineTable({
+    state: v.string(),
+    createdAt: v.number(),
+  }).index("by_state", ["state"]),
+
   courts: defineTable({
     courtNumber: v.number(),
     label: v.string(),
