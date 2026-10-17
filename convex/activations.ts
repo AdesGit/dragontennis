@@ -45,6 +45,7 @@ export const beginActivation = internalMutation({
         court,
         durationMin,
         activationId: liveOnCourt._id,
+        reason: "light_extension",
         comment: `Prolongation court ${court} (+${durationMin} min)`,
         createdAt: now,
       });
@@ -85,6 +86,8 @@ export const beginActivation = internalMutation({
       court,
       durationMin,
       activationId,
+      reason: "light_usage",
+      comment: `Allumage court ${court} (${durationMin} min)`,
       createdAt: now,
     });
     await ctx.db.patch(userId, { balance: balanceAfter });
@@ -129,6 +132,7 @@ export const failActivation = internalMutation({
       amount: act.amount,
       balanceBefore,
       balanceAfter,
+      reason: "refund_failed_activation",
       comment: `Échec allumage court ${act.court} — recrédité`,
       reversalOf: act.transactionId,
       createdAt: Date.now(),

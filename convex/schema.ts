@@ -4,6 +4,17 @@ import { v } from "convex/values";
 
 const role = v.union(v.literal("admin"), v.literal("user"));
 
+// Why a transaction happened, as opposed to `type` (which says what it did to the balance).
+// Optional on purpose: the pre-existing rows have no reason and a required field would
+// fail schema validation on them. See convex/migrations.ts for the backfill.
+const transactionReason = v.union(
+  v.literal("credit_admin"),
+  v.literal("light_usage"),
+  v.literal("light_extension"),
+  v.literal("refund_failed_activation"),
+  v.literal("reversal"),
+);
+
 export default defineSchema({
   ...authTables,
 
@@ -42,6 +53,7 @@ export default defineSchema({
     amount: v.number(),
     balanceBefore: v.number(),
     balanceAfter: v.number(),
+    reason: v.optional(transactionReason),
     comment: v.optional(v.string()),
     authorId: v.optional(v.id("users")),
     court: v.optional(v.number()),

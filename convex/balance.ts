@@ -20,7 +20,9 @@ export const creditAccount = mutation({
       amount,
       balanceBefore,
       balanceAfter,
-      comment,
+      reason: "credit_admin",
+      // Keep an admin-typed comment verbatim; otherwise write a readable default.
+      comment: comment?.trim() ? comment : `Crédit admin (+${amount} XPF)`,
       authorId: adminId,
       createdAt: Date.now(),
     });
@@ -59,7 +61,8 @@ export const reverseTransaction = mutation({
       amount: target.amount,
       balanceBefore,
       balanceAfter,
-      comment: comment ?? `Annulation de ${target.type} (${target.amount} XPF)`,
+      reason: "reversal",
+      comment: comment?.trim() ? comment : `Annulation de ${target.type} (${target.amount} XPF)`,
       authorId: adminId,
       reversalOf: transactionId,
       createdAt: Date.now(),
