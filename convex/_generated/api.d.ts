@@ -21,6 +21,7 @@ import type * as http from "../http.js";
 import type * as legrand from "../legrand.js";
 import type * as legrandDb from "../legrandDb.js";
 import type * as members from "../members.js";
+import type * as migrations from "../migrations.js";
 import type * as pricing from "../pricing.js";
 import type * as stats from "../stats.js";
 import type * as transactions from "../transactions.js";
@@ -46,6 +47,7 @@ declare const fullApi: ApiFromModules<{
   legrand: typeof legrand;
   legrandDb: typeof legrandDb;
   members: typeof members;
+  migrations: typeof migrations;
   pricing: typeof pricing;
   stats: typeof stats;
   transactions: typeof transactions;
