@@ -5,3 +5,7 @@ node_modules/
 
 # TS incremental build cache
 *.tsbuildinfo
+
+# Local Convex backups (contain production data)
+backups/
+logs/backup-cron.log

@@ -11,6 +11,7 @@
 import type * as ResetEmail from "../ResetEmail.js";
 import type * as activations from "../activations.js";
 import type * as auth from "../auth.js";
+import type * as backup from "../backup.js";
 import type * as balance from "../balance.js";
 import type * as courts from "../courts.js";
 import type * as crons from "../crons.js";
@@ -35,6 +36,7 @@ declare const fullApi: ApiFromModules<{
   ResetEmail: typeof ResetEmail;
   activations: typeof activations;
   auth: typeof auth;
+  backup: typeof backup;
   balance: typeof balance;
   courts: typeof courts;
   crons: typeof crons;

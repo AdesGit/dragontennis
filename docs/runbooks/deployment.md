@@ -40,6 +40,23 @@ npx convex logs          # logs des fonctions (console.log)
 - `.env.local` : `NEXT_PUBLIC_CONVEX_URL=https://convex-tennis.aidigitalassistant.cloud` (baké au build).
 - Process : pm2 `tennis` → `npm start` (`next start -p 3001`).
 
+## Backup Convex
+
+Voir la documentation dev complète : [`docs/runbooks/backup-convex.md`](./backup-convex.md).
+
+Résumé opérationnel :
+
+- Export manuel : `npm run backup:export`.
+- Import dry-run : `npm run backup:import -- backups/tennis-backup-YYYY-MM-DD.json`.
+- Import réel : `npm run backup:import -- backups/tennis-backup-YYYY-MM-DD.json --apply`.
+- Cron installé : tous les jours à 02:30, `npm run backup:daily`, log dans `logs/backup-cron.log`.
+- Le cron exporte tous les jours, puis envoie le fichier JSON par email selon `.env.local` :
+  - `BACKUP_EMAIL_FREQUENCY=daily|weekly|never`
+  - `BACKUP_EMAIL_RECIPIENTS=christian.gall@gmail.com`
+  - `BACKUP_EMAIL_WEEKDAY=1` pour l'envoi hebdo le lundi.
+- Purge locale : `BACKUP_RETENTION_DAYS=31` supprime les fichiers `backups/tennis-backup-*.json` plus vieux qu'un mois.
+- Sur le VPS, `CONVEX_SITE_URL=http://127.0.0.1:3221` permet au CLI de joindre directement les HTTP actions Convex sans dépendre du routage nginx public.
+
 Déployer une nouvelle version :
 ```bash
 cd /home/claude/dev/apps/tennis

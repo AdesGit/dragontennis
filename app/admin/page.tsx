@@ -3,6 +3,7 @@
 import Link from "next/link";
 import {
   BarChart3,
+  DatabaseBackup,
   HelpCircle,
   KeyRound,
   Receipt,
@@ -26,6 +27,7 @@ const TILES: AdminTile[] = [
   { href: "/credits", label: "Créditer", icon: Wallet },
   { href: "/history", label: "Historique", icon: Receipt },
   { href: "/admin/faq", label: "Gérer FAQ", icon: HelpCircle },
+  { href: "/admin/backup", label: "Backup", icon: DatabaseBackup },
   { href: "/tokenManagementLegrand", label: "Tokens Legrand", icon: KeyRound },
 ];
 

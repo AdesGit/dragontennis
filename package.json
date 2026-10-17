@@ -7,7 +7,11 @@
     "build": "next build",
     "start": "next start -p 3001",
     "lint": "next lint",
-    "convex:dev": "convex dev"
+    "convex:dev": "convex dev",
+    "backup:export": "node scripts/convex-backup.cjs export",
+    "backup:import": "node scripts/convex-backup.cjs import",
+    "backup:daily": "bash scripts/backup-daily.sh",
+    "backup:cron": "node scripts/backup-cron.cjs"
   },
   "dependencies": {
     "@auth/core": "0.37.4",

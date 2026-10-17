@@ -5,6 +5,8 @@ import { internal } from "./_generated/api";
 import { requireAdmin } from "./users";
 import { cost } from "./pricing";
 
+const EXTENSION_MINUTES = 30;
+
 export const beginActivation = internalMutation({
   args: { userId: v.id("users"), court: v.number(), durationMin: v.number() },
   handler: async (ctx, { userId, court, durationMin }) => {
@@ -22,6 +24,48 @@ export const beginActivation = internalMutation({
     const balanceAfter = balanceBefore - amount;
 
     const now = Date.now();
+    const liveOnCourt = (await ctx.db
+      .query("activations")
+      .withIndex("by_status", (q) => q.eq("status", "active"))
+      .collect())
+      .filter((a) => a.court === court && a.endTime > now)
+      .sort((a, b) => b.endTime - a.endTime)[0];
+
+    if (liveOnCourt) {
+      if (durationMin !== EXTENSION_MINUTES) {
+        throw new Error(`Prolongation invalide (+${EXTENSION_MINUTES} min uniquement)`);
+      }
+
+      const txId = await ctx.db.insert("transactions", {
+        userId,
+        type: "debit",
+        amount,
+        balanceBefore,
+        balanceAfter,
+        court,
+        durationMin,
+        activationId: liveOnCourt._id,
+        comment: `Prolongation court ${court} (+${durationMin} min)`,
+        createdAt: now,
+      });
+      const endTime = liveOnCourt.endTime + durationMin * 60 * 1000;
+      await ctx.db.patch(userId, { balance: balanceAfter });
+      await ctx.db.patch(liveOnCourt._id, {
+        durationMin: liveOnCourt.durationMin + durationMin,
+        amount: liveOnCourt.amount + amount,
+        endTime,
+        transactionId: txId,
+      });
+
+      return {
+        mode: "extended" as const,
+        activationId: liveOnCourt._id,
+        amount,
+        balanceAfter,
+        endTime,
+      };
+    }
+
     const endTime = now + durationMin * 60 * 1000;
     const activationId = await ctx.db.insert("activations", {
       userId,
@@ -47,6 +91,7 @@ export const beginActivation = internalMutation({
     await ctx.db.patch(activationId, { transactionId: txId });
 
     return {
+      mode: "started" as const,
       activationId,
       homeId: courtRow.homeId,
       moduleId: courtRow.moduleId,
@@ -98,12 +143,16 @@ export const activateLight = action({
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Non authentifié");
 
-    // Reserve first: atomic balance check + debit + pending activation.
+    // Reserve first: atomic balance check + debit + pending activation, or extension if already lit.
     const begun = await ctx.runMutation(internal.activations.beginActivation, {
       userId,
       court,
       durationMin,
     });
+
+    if (begun.mode === "extended") {
+      return { amount: begun.amount, balanceAfter: begun.balanceAfter, endTime: begun.endTime };
+    }
 
     try {
       const resp = await ctx.runAction(internal.legrand.netatmoSetState, {
@@ -209,9 +258,20 @@ export const dueActive = internalQuery({
   },
 });
 
+export const dueActivationById = internalQuery({
+  args: { activationId: v.id("activations") },
+  handler: async (ctx, { activationId }) => {
+    const a = await ctx.db.get(activationId);
+    if (!a || a.status !== "active" || a.endTime > Date.now()) return null;
+    return a;
+  },
+});
+
 export const markUsed = internalMutation({
   args: { activationId: v.id("activations"), netatmoResponse: v.string() },
   handler: async (ctx, { activationId, netatmoResponse }) => {
+    const act = await ctx.db.get(activationId);
+    if (!act || act.status !== "active" || act.endTime > Date.now()) return;
     await ctx.db.patch(activationId, { status: "used", netatmoResponse });
   },
 });
@@ -263,9 +323,12 @@ export const turnoffDue = internalAction({
   handler: async (ctx) => {
     const due = await ctx.runQuery(internal.activations.dueActive, {});
     for (const a of due) {
-      const courtRow = await ctx.runQuery(internal.courts.byNumber, { courtNumber: a.court });
+      const stillDue = await ctx.runQuery(internal.activations.dueActivationById, { activationId: a._id });
+      if (!stillDue) continue;
+
+      const courtRow = await ctx.runQuery(internal.courts.byNumber, { courtNumber: stillDue.court });
       if (!courtRow) {
-        console.warn(`[turnoff] court ${a.court} introuvable — activation ${a._id} laissée active`);
+        console.warn(`[turnoff] court ${stillDue.court} introuvable — activation ${a._id} laissée active`);
         continue;
       }
       try {
@@ -281,7 +344,7 @@ export const turnoffDue = internalAction({
         });
       } catch (err: unknown) {
         // Leave it active; the next cron tick retries. Log only.
-        console.log(`[turnoff] court ${a.court} échec: ${err instanceof Error ? err.message : err}`);
+        console.log(`[turnoff] court ${stillDue.court} échec: ${err instanceof Error ? err.message : err}`);
       }
     }
   },

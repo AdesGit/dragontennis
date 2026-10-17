@@ -34,14 +34,17 @@ export function CourtBoard() {
 
   const activeByCourt = new Map(active.map((a) => [a.court, a]));
 
-  async function run(court: number, durationMin: number) {
+  async function run(court: number, durationMin: number, mode: "start" | "extend" = "start") {
     setBusy(`${court}-${durationMin}`);
     setMessage(null);
     try {
       const res = await activate({ court, durationMin });
       setMessage({
         ok: true,
-        text: `Lumière allumée — ${res.amount} XPF débités, solde ${res.balanceAfter} XPF.`,
+        text:
+          mode === "extend"
+            ? `Session prolongée de ${durationMin} min — ${res.amount} XPF débités, solde ${res.balanceAfter} XPF.`
+            : `Lumière allumée — ${res.amount} XPF débités, solde ${res.balanceAfter} XPF.`,
       });
     } catch (e) {
       setMessage({ ok: false, text: e instanceof Error ? e.message : "Erreur" });
@@ -77,16 +80,36 @@ export function CourtBoard() {
                 </div>
 
                 {live ? (
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex flex-col">
-                      <span className="text-sm font-medium">{litBy}</span>
-                      <span className="text-xs text-muted-foreground">Temps restant</span>
+                  <div className="flex flex-col gap-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium">{litBy}</span>
+                        <span className="text-xs text-muted-foreground">Temps restant</span>
+                      </div>
+                      <Countdown
+                        startTime={live.startTime}
+                        endTime={live.endTime}
+                        durationMin={live.durationMin}
+                      />
                     </div>
-                    <Countdown
-                      startTime={live.startTime}
-                      endTime={live.endTime}
-                      durationMin={live.durationMin}
-                    />
+                    <button
+                      type="button"
+                      disabled={busy !== null}
+                      onClick={() => run(c.courtNumber, 30, "extend")}
+                      className={cn(
+                        "inline-flex w-full items-center justify-center gap-1.5 rounded-md px-4 py-3 text-sm font-medium text-white transition-colors disabled:opacity-50",
+                        color.btn,
+                      )}
+                    >
+                      {busy === `${c.courtNumber}-30` ? (
+                        "…"
+                      ) : (
+                        <>
+                          <Lightbulb className="h-4 w-4" />
+                          30 min+
+                        </>
+                      )}
+                    </button>
                   </div>
                 ) : (
                   <div className="flex gap-3">

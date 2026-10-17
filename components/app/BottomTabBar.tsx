@@ -1,8 +1,9 @@
 "use client";
 
+import { useAuthActions } from "@convex-dev/auth/react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Home, HelpCircle, Shield, type LucideIcon } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { Home, HelpCircle, LogOut, Shield, type LucideIcon } from "lucide-react";
 import { useQuery } from "convex/react";
 
 import { api } from "@/convex/_generated/api";
@@ -24,10 +25,17 @@ function isActive(pathname: string, href: string): boolean {
 
 export function BottomTabBar() {
   const pathname = usePathname();
+  const router = useRouter();
   const me = useQuery(api.users.getMe);
+  const { signOut } = useAuthActions();
 
   const tabs =
     me?.role === "admin" ? [...MEMBER_TABS, ADMIN_TAB] : MEMBER_TABS;
+
+  async function handleSignOut() {
+    await signOut();
+    router.push("/signin");
+  }
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t bg-background md:hidden">
@@ -48,6 +56,14 @@ export function BottomTabBar() {
           </Link>
         );
       })}
+      <button
+        type="button"
+        onClick={handleSignOut}
+        className="flex min-h-14 flex-1 flex-col items-center justify-center gap-1 text-xs text-muted-foreground"
+      >
+        <LogOut size={20} />
+        Quitter
+      </button>
     </nav>
   );
 }

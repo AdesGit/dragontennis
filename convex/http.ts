@@ -1,6 +1,6 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
-import { internal } from "./_generated/api";
+import { internal, api } from "./_generated/api";
 import { auth } from "./auth";
 
 const http = httpRouter();
@@ -43,6 +43,50 @@ http.route({
 
     dest.searchParams.set("legrand", "success");
     return Response.redirect(dest.toString(), 302);
+  }),
+});
+
+http.route({
+  path: "/backup/export",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const body = (await request.json()) as { backupSecret?: string };
+      const snapshot = await ctx.runQuery(api.backup.exportData, {
+        backupSecret: body.backupSecret,
+      });
+      return Response.json(snapshot);
+    } catch (err) {
+      return Response.json(
+        { error: err instanceof Error ? err.message : "Erreur export backup" },
+        { status: 400 },
+      );
+    }
+  }),
+});
+
+http.route({
+  path: "/backup/import",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const body = (await request.json()) as {
+        backupSecret?: string;
+        snapshot?: unknown;
+        dryRun?: boolean;
+      };
+      const summary = await ctx.runMutation(api.backup.importData, {
+        backupSecret: body.backupSecret,
+        snapshot: body.snapshot,
+        dryRun: body.dryRun ?? true,
+      });
+      return Response.json(summary);
+    } catch (err) {
+      return Response.json(
+        { error: err instanceof Error ? err.message : "Erreur import backup" },
+        { status: 400 },
+      );
+    }
   }),
 });
 
