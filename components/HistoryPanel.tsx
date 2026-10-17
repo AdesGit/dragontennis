@@ -5,6 +5,17 @@ import { api } from "@/convex/_generated/api";
 import { useState } from "react";
 import type { Id } from "@/convex/_generated/dataModel";
 
+const REASON_LABELS: Record<string, string> = {
+  credit_admin: "Crédit administrateur",
+  light_usage: "Allumage éclairage",
+  light_extension: "Prolongation éclairage",
+  refund_failed_activation: "Remboursement allumage échoué",
+  reversal: "Annulation",
+};
+
+// Rows written before the `reason` backfill have none: show a dash rather than an empty cell.
+const reasonLabel = (reason?: string) => (reason ? REASON_LABELS[reason] ?? reason : "—");
+
 export function HistoryPanel() {
   const txns = useQuery(api.transactions.listAll);
   const members = useQuery(api.users.listMembers);
@@ -17,7 +28,13 @@ export function HistoryPanel() {
   const q = filter.toLowerCase();
   const rows = txns.filter((t) => {
     const name = (nameById.get(t.userId) ?? "").toLowerCase();
-    return !q || name.includes(q) || t.type.includes(q) || (t.comment ?? "").toLowerCase().includes(q);
+    return (
+      !q ||
+      name.includes(q) ||
+      t.type.includes(q) ||
+      reasonLabel(t.reason).toLowerCase().includes(q) ||
+      (t.comment ?? "").toLowerCase().includes(q)
+    );
   });
 
   return (
@@ -25,7 +42,7 @@ export function HistoryPanel() {
       <input
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
-        placeholder="Rechercher (membre, type, commentaire)"
+        placeholder="Rechercher (membre, type, raison, commentaire)"
         className="rounded border border-gray-300 px-3 py-2"
       />
       {msg && (
@@ -35,8 +52,8 @@ export function HistoryPanel() {
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b text-gray-500">
-              <th className="py-2">Date</th><th>Membre</th><th>Type</th>
-              <th>Montant</th><th>Avant</th><th>Après</th><th></th>
+              <th className="py-2">Date</th><th>Membre</th><th>Type</th><th>Raison</th>
+              <th>Montant</th><th>Avant</th><th>Après</th><th>Commentaire</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -45,9 +62,11 @@ export function HistoryPanel() {
                 <td className="py-2">{new Date(t.createdAt).toLocaleString("fr-FR")}</td>
                 <td>{nameById.get(t.userId) ?? "—"}</td>
                 <td>{t.type}</td>
+                <td>{reasonLabel(t.reason)}</td>
                 <td>{t.amount}</td>
                 <td>{t.balanceBefore}</td>
                 <td>{t.balanceAfter}</td>
+                <td className="text-gray-600">{t.comment ?? "—"}</td>
                 <td>
                   {t.type !== "reversal" && (
                     <button
