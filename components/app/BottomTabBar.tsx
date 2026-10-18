@@ -9,6 +9,8 @@ import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { cn } from "@/lib/utils";
 
+import { InstallPwaButton } from "./InstallPwaButton";
+
 type Tab = { href: string; label: string; icon: LucideIcon };
 
 const MEMBER_TABS: Tab[] = [
@@ -56,6 +58,7 @@ export function BottomTabBar() {
           </Link>
         );
       })}
+      <InstallPwaButton variant="tab" />
       <button
         type="button"
         onClick={handleSignOut}

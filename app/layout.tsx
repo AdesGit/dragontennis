@@ -8,6 +8,16 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 export const metadata: Metadata = {
   title: "Dragon Tennis",
   description: "Gestion des lumières — A.S. Dragon Tennis",
+  applicationName: "Dragon Tennis",
+  icons: {
+    icon: "/icon-192.png",
+    apple: "/icon-192.png",
+  },
+  appleWebApp: {
+    capable: true,
+    title: "Dragon Tennis",
+    statusBarStyle: "default",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

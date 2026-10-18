@@ -11,6 +11,7 @@ import { SignOutButton } from "@/components/SignOutButton";
 import { cn } from "@/lib/utils";
 
 import { BrandMark } from "./BrandMark";
+import { InstallPwaButton } from "./InstallPwaButton";
 
 type NavLink = { href: string; label: string; icon: LucideIcon };
 
@@ -58,6 +59,7 @@ export function AppNavbarDesktop() {
                 </Link>
               );
             })}
+            <InstallPwaButton variant="navbar" />
           </nav>
         </div>
         <div className="flex items-center gap-3">
