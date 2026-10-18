@@ -2,10 +2,16 @@
 
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ShieldCheck, ShieldOff, Trash2 } from "lucide-react";
 
+import { Pagination, usePagination } from "@/components/ui/pagination";
 import type { Id } from "@/convex/_generated/dataModel";
+
+const collator = new Intl.Collator("fr", { sensitivity: "base", numeric: true });
+
+const fullName = (m: { firstName?: string | null; lastName?: string | null; email?: string | null }) =>
+  `${m.firstName ?? ""} ${m.lastName ?? ""}`.trim() || m.email || "Membre";
 
 export function MembersPanel() {
   const data = useQuery(api.users.listMembersWithPending);
@@ -19,6 +25,49 @@ export function MembersPanel() {
   const [msg, setMsg] = useState<string | null>(null);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+
+  const q = search.trim().toLowerCase();
+
+  // Sort on last name then first name with a locale collator, so the accented
+  // names used by the club order the same way as in a paper register.
+  const members = useMemo(() => {
+    const list = data?.members ?? [];
+    return list
+      .filter(
+        (m) =>
+          !q ||
+          fullName(m).toLowerCase().includes(q) ||
+          (m.email ?? "").toLowerCase().includes(q),
+      )
+      .slice()
+      .sort(
+        (a, b) =>
+          collator.compare(a.lastName ?? "", b.lastName ?? "") ||
+          collator.compare(a.firstName ?? "", b.firstName ?? "") ||
+          collator.compare(a.email ?? "", b.email ?? ""),
+      );
+  }, [data?.members, q]);
+
+  const pending = useMemo(() => {
+    const list = data?.pending ?? [];
+    return list
+      .filter(
+        (p) =>
+          !q ||
+          `${p.firstName} ${p.lastName}`.toLowerCase().includes(q) ||
+          p.email.toLowerCase().includes(q),
+      )
+      .slice()
+      .sort(
+        (a, b) =>
+          collator.compare(a.lastName ?? "", b.lastName ?? "") ||
+          collator.compare(a.firstName ?? "", b.firstName ?? ""),
+      );
+  }, [data?.pending, q]);
+
+  const memberPage = usePagination(members);
+  const pendingPage = usePagination(pending);
 
   if (data === undefined || me === undefined) return <p>Chargement…</p>;
 
@@ -74,14 +123,21 @@ export function MembersPanel() {
         {msg && <p className="text-sm text-gray-700">{msg}</p>}
       </form>
 
-      <section>
-        <h2 className="mb-2 font-semibold">Membres ({data.members.length})</h2>
-        {actionMsg && <p className="mb-2 text-sm text-red-600">{actionMsg}</p>}
+      <input
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="Rechercher un membre (nom, prénom, email)"
+        className="max-w-md rounded border border-gray-300 px-3 py-2"
+      />
+
+      <section className="flex flex-col gap-3">
+        <h2 className="font-semibold">Membres ({members.length})</h2>
+        {actionMsg && <p className="text-sm text-red-600">{actionMsg}</p>}
         <ul className="flex flex-col divide-y">
-          {data.members.map((m) => {
+          {memberPage.visible.map((m) => {
             const isSelf = m._id === me?._id;
             const isAdmin = m.role === "admin";
-            const name = `${m.firstName ?? ""} ${m.lastName ?? ""}`.trim() || m.email || "Membre";
+            const name = fullName(m);
             return (
               <li key={m._id} className="flex flex-wrap items-center justify-between gap-3 py-2 text-sm">
                 <span>
@@ -119,19 +175,37 @@ export function MembersPanel() {
             );
           })}
         </ul>
+        <Pagination
+          page={memberPage.page}
+          pageCount={memberPage.pageCount}
+          pageSize={memberPage.pageSize}
+          total={memberPage.total}
+          onPage={memberPage.setPage}
+          onPageSize={memberPage.setPageSize}
+          label="membres"
+        />
       </section>
 
-      {data.pending.length > 0 && (
-        <section>
-          <h2 className="mb-2 font-semibold">Invités en attente ({data.pending.length})</h2>
+      {pending.length > 0 && (
+        <section className="flex flex-col gap-3">
+          <h2 className="font-semibold">Invités en attente ({pending.length})</h2>
           <ul className="flex flex-col gap-1 text-sm">
-            {data.pending.map((p) => (
+            {pendingPage.visible.map((p) => (
               <li key={p.email} className="flex justify-between border-b py-1 text-gray-500">
                 <span>{p.firstName} {p.lastName} — {p.email}</span>
                 <span>expire le {new Date(p.expiresAt).toLocaleDateString("fr-FR")}</span>
               </li>
             ))}
           </ul>
+          <Pagination
+            page={pendingPage.page}
+            pageCount={pendingPage.pageCount}
+            pageSize={pendingPage.pageSize}
+            total={pendingPage.total}
+            onPage={pendingPage.setPage}
+            onPageSize={pendingPage.setPageSize}
+            label="invitations"
+          />
         </section>
       )}
     </div>

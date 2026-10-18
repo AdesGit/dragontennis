@@ -2,8 +2,10 @@
 
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { Id } from "@/convex/_generated/dataModel";
+
+import { Pagination, usePagination } from "@/components/ui/pagination";
 
 const REASON_LABELS: Record<string, string> = {
   credit_admin: "Crédit administrateur",
@@ -23,19 +25,32 @@ export function HistoryPanel() {
   const [filter, setFilter] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
 
+  const nameById = useMemo(
+    () => new Map((members ?? []).map((m) => [m._id, `${m.firstName} ${m.lastName}`])),
+    [members],
+  );
+
+  const rows = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    return (txns ?? [])
+      .filter((t) => {
+        const name = (nameById.get(t.userId) ?? "").toLowerCase();
+        return (
+          !q ||
+          name.includes(q) ||
+          t.type.includes(q) ||
+          reasonLabel(t.reason).toLowerCase().includes(q) ||
+          (t.comment ?? "").toLowerCase().includes(q)
+        );
+      })
+      .slice()
+      // Most recent first: an admin reads the history from the top.
+      .sort((a, b) => b.createdAt - a.createdAt);
+  }, [txns, nameById, filter]);
+
+  const paged = usePagination(rows);
+
   if (txns === undefined || members === undefined) return <p>Chargement…</p>;
-  const nameById = new Map(members.map((m) => [m._id, `${m.firstName} ${m.lastName}`]));
-  const q = filter.toLowerCase();
-  const rows = txns.filter((t) => {
-    const name = (nameById.get(t.userId) ?? "").toLowerCase();
-    return (
-      !q ||
-      name.includes(q) ||
-      t.type.includes(q) ||
-      reasonLabel(t.reason).toLowerCase().includes(q) ||
-      (t.comment ?? "").toLowerCase().includes(q)
-    );
-  });
 
   return (
     <div className="flex flex-col gap-3">
@@ -57,7 +72,7 @@ export function HistoryPanel() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((t) => (
+            {paged.visible.map((t) => (
               <tr key={t._id} className="border-b">
                 <td className="py-2">{new Date(t.createdAt).toLocaleString("fr-FR")}</td>
                 <td>{nameById.get(t.userId) ?? "—"}</td>
@@ -90,6 +105,15 @@ export function HistoryPanel() {
           </tbody>
         </table>
       </div>
+      <Pagination
+        page={paged.page}
+        pageCount={paged.pageCount}
+        pageSize={paged.pageSize}
+        total={paged.total}
+        onPage={paged.setPage}
+        onPageSize={paged.setPageSize}
+        label="écritures"
+      />
     </div>
   );
 }
